@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Board</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+    --text:#e8eaed; --muted:#9aa3af; --accent:#6ee7b7; --accent2:#60a5fa;
+    --danger:#f87171; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh;
+  }
+  header{
+    padding:24px 32px 8px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+  h1{font-size:20px; margin:0; font-weight:700; letter-spacing:.3px;}
+  h1 span{color:var(--accent);}
+  .subtitle{color:var(--muted); font-size:13px;}
+
+  .timer-wrap{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    padding:20px 24px 28px;
+  }
+  .ring{
+    position:relative; width:220px; height:220px;
+  }
+  .ring svg{transform:rotate(-90deg);}
+  .ring-bg{fill:none; stroke:var(--panel2); stroke-width:10;}
+  .ring-fg{fill:none; stroke:var(--accent); stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset .25s linear, stroke .3s;}
+  .ring-center{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .time-display{font-size:40px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .mode-label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-top:4px;}
+
+  .controls{display:flex; gap:10px; align-items:center;}
+  button{
+    font-family:inherit; cursor:pointer; border:none; border-radius:10px;
+    padding:10px 18px; font-size:14px; font-weight:600; transition:transform .1s, opacity .2s;
+  }
+  button:active{transform:scale(0.96);}
+  .btn-primary{background:var(--accent); color:#0b1210;}
+  .btn-ghost{background:var(--panel2); color:var(--text); border:1px solid var(--border);}
+  .btn-ghost:hover{background:#242935;}
+  .icon-btn{background:transparent; color:var(--muted); padding:6px 10px; font-size:13px;}
+  .icon-btn:hover{color:var(--text);}
+
+  .mode-tabs{display:flex; gap:6px; background:var(--panel2); padding:4px; border-radius:10px;}
+  .mode-tab{padding:6px 12px; border-radius:8px; font-size:12px; color:var(--muted); cursor:pointer; user-select:none;}
+  .mode-tab.active{background:var(--panel); color:var(--text);}
+
+  .board{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:16px;
+    padding:0 32px 32px; max-width:1100px; margin:0 auto;
+  }
+  @media(max-width:800px){.board{grid-template-columns:1fr;}}
+
+  .column{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:14px; display:flex; flex-direction:column; min-height:260px;
+  }
+  .column-title{
+    font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+    color:var(--muted); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .count{background:var(--panel2); color:var(--text); border-radius:20px; padding:1px 9px; font-size:11px;}
+
+  .add-row{display:flex; gap:6px; margin-bottom:10px;}
+  .add-row input{
+    flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+    padding:8px 10px; color:var(--text); font-size:13px; outline:none;
+  }
+  .add-row input:focus{border-color:var(--accent2);}
+  .add-row button{padding:8px 12px;}
+
+  .cards{display:flex; flex-direction:column; gap:8px; min-height:40px;}
+  .card{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; font-size:13px; display:flex; align-items:flex-start; gap:8px;
+    cursor:grab;
+  }
+  .card.dragging{opacity:.4;}
+  .card .txt{flex:1; word-break:break-word;}
+  .card .pomo{color:var(--accent); font-size:11px; margin-top:2px;}
+  .card .del{color:var(--muted); background:none; padding:0 2px; font-size:14px;}
+  .card .del:hover{color:var(--danger);}
+  .column.dragover{outline:2px dashed var(--accent2); outline-offset:-4px;}
+
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:20px; opacity:.6;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Focus <span>Board</span></h1>
+    <div class="subtitle">뽀모도로 타이머 + 할 일 보드</div>
+  </div>
+  <div class="mode-tabs" id="modeTabs">
+    <div class="mode-tab active" data-mode="focus">집중 25</div>
+    <div class="mode-tab" data-mode="short">짧은 휴식 5</div>
+    <div class="mode-tab" data-mode="long">긴 휴식 15</div>
+  </div>
+</header>
+
+<div class="timer-wrap">
+  <div class="ring">
+    <svg width="220" height="220" viewBox="0 0 220 220">
+      <circle class="ring-bg" cx="110" cy="110" r="100"></circle>
+      <circle class="ring-fg" id="ringFg" cx="110" cy="110" r="100"></circle>
+    </svg>
+    <div class="ring-center">
+      <div class="time-display" id="timeDisplay">25:00</div>
+      <div class="mode-label" id="modeLabel">FOCUS</div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn-primary" id="startBtn">시작</button>
+    <button class="btn-ghost" id="resetBtn">리셋</button>
+    <button class="icon-btn" id="skipBtn">건너뛰기 →</button>
+  </div>
+</div>
+
+<div class="board">
+  <div class="column" data-status="todo">
+    <div class="column-title">할 일 <span class="count" id="count-todo">0</span></div>
+    <div class="add-row">
+      <input type="text" id="input-todo" placeholder="새 작업 추가...">
+      <button class="btn-ghost" onclick="addCard('todo')">+</button>
+    </div>
+    <div class="cards" id="cards-todo"></div>
+  </div>
+  <div class="column" data-status="doing">
+    <div class="column-title">진행 중 <span class="count" id="count-doing">0</span></div>
+    <div class="add-row">
+      <input type="text" id="input-doing" placeholder="새 작업 추가...">
+      <button class="btn-ghost" onclick="addCard('doing')">+</button>
+    </div>
+    <div class="cards" id="cards-doing"></div>
+  </div>
+  <div class="column" data-status="done">
+    <div class="column-title">완료 <span class="count" id="count-done">0</span></div>
+    <div class="add-row">
+      <input type="text" id="input-done" placeholder="새 작업 추가...">
+      <button class="btn-ghost" onclick="addCard('done')">+</button>
+    </div>
+    <div class="cards" id="cards-done"></div>
+  </div>
+</div>
+
+<footer>오늘 완료한 뽀모도로: <span id="pomoCount">0</span>개 · 데이터는 이 브라우저에만 저장됩니다</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var DURATIONS = { focus: 25*60, short: 5*60, long: 15*60 };
+  var RADIUS = 100;
+  var CIRC = 2 * Math.PI * RADIUS;
+  var ringFg = document.getElementById('ringFg');
+  ringFg.style.strokeDasharray = CIRC;
+
+  var state = load('fb_timer', { mode:'focus', remaining: DURATIONS.focus, running:false, pomoCount:0, lastActiveTaskId:null });
+  var tickInterval = null;
+
+  function load(key, fallback){
+    try{
+      var raw = localStorage.getItem(key);
+      if(!raw) return fallback;
+      return JSON.parse(raw);
+    }catch(e){ return fallback; }
+  }
+  function save(key, val){
+    try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+  }
+
+  function fmt(sec){
+    var m = Math.floor(sec/60);
+    var s = sec%60;
+    return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }
+
+  function render(){
+    document.getElementById('timeDisplay').textContent = fmt(state.remaining);
+    var total = DURATIONS[state.mode];
+    var frac = state.remaining / total;
+    var offset = CIRC * (1 - frac);
+    ringFg.style.strokeDashoffset = offset;
+    var labelMap = { focus:'FOCUS', short:'SHORT BREAK', long:'LONG BREAK' };
+    document.getElementById('modeLabel').textContent = labelMap[state.mode];
+    var colorMap = { focus:'#6ee7b7', short:'#60a5fa', long:'#fbbf24' };
+    ringFg.style.stroke = colorMap[state.mode];
+    document.getElementById('startBtn').textContent = state.running ? '일시정지' : '시작';
+    document.getElementById('pomoCount').textContent = state.pomoCount;
+
+    document.querySelectorAll('.mode-tab').forEach(function(t){
+      t.classList.toggle('active', t.dataset.mode === state.mode);
+    });
+
+    document.title = (state.running ? fmt(state.remaining)+' · ' : '') + 'Focus Board';
+  }
+
+  function switchMode(mode, resetRunning){
+    state.mode = mode;
+    state.remaining = DURATIONS[mode];
+    if(resetRunning !== false){ state.running = false; clearTick(); }
+    save('fb_timer', state);
+    render();
+  }
+
+  function clearTick(){
+    if(tickInterval){ clearInterval(tickInterval); tickInterval = null; }
+  }
+
+  function tick(){
+    state.remaining -= 1;
+    if(state.remaining <= 0){
+      if(state.mode === 'focus'){ state.pomoCount += 1; }
+      clearTick();
+      state.running = false;
+      save('fb_timer', state);
+      beep();
+      var next = state.mode === 'focus' ? 'short' : 'focus';
+      switchMode(next, false);
+      return;
+    }
+    save('fb_timer', state);
+    render();
+  }
+
+  function beep(){
+    try{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var o = ctx.createOscillator();
+      var g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.15, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      o.start(); o.stop(ctx.currentTime + 0.6);
+    }catch(e){}
+  }
+
+  function startPause(){
+    state.running = !state.running;
+    if(state.running){
+      tickInterval = setInterval(tick, 1000);
+    } else {
+      clearTick();
+    }
+    save('fb_timer', state);
+    render();
+  }
+
+  function resetTimer(){
+    state.remaining = DURATIONS[state.mode];
+    state.running = false;
+    clearTick();
+    save('fb_timer', state);
+    render();
+  }
+
+  function skip(){
+    var next = state.mode === 'focus' ? 'short' : 'focus';
+    switchMode(next, true);
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startPause);
+  document.getElementById('resetBtn').addEventListener('click', resetTimer);
+  document.getElementById('skipBtn').addEventListener('click', skip);
+  document.getElementById('modeTabs').addEventListener('click', function(e){
+    var tab = e.target.closest('.mode-tab');
+    if(!tab) return;
+    switchMode(tab.dataset.mode, true);
+  });
+
+  if(state.running){ tickInterval = setInterval(tick, 1000); }
+  render();
+
+  var COLS = ['todo','doing','done'];
+  var tasks = load('fb_tasks', []);
+
+  function saveTasks(){ save('fb_tasks', tasks); }
+
+  function renderBoard(){
+    COLS.forEach(function(col){
+      var container = document.getElementById('cards-'+col);
+      container.innerHTML = '';
+      var items = tasks.filter(function(t){ return t.status === col; });
+      document.getElementById('count-'+col).textContent = items.length;
+      items.forEach(function(t){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.draggable = true;
+        card.dataset.id = t.id;
+        card.innerHTML = '<div class="txt">'+escapeHtml(t.text)+'</div><button class="del" title="삭제">×</button>';
+        card.querySelector('.del').addEventListener('click', function(){
+          tasks = tasks.filter(function(x){ return x.id !== t.id; });
+          saveTasks(); renderBoard();
+        });
+        card.addEventListener('dragstart', function(){
+          card.classList.add('dragging');
+          card.dataset.dragging = 'true';
+        });
+        card.addEventListener('dragend', function(){
+          card.classList.remove('dragging');
+        });
+        container.appendChild(card);
+      });
+    });
+  }
+
+  function escapeHtml(s){
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function addCard(status){
+    var input = document.getElementById('input-'+status);
+    var text = input.value.trim();
+    if(!text) return;
+    tasks.push({ id: Date.now()+'-'+Math.random().toString(36).slice(2), text: text, status: status });
+    input.value = '';
+    saveTasks(); renderBoard();
+  }
+  window.addCard = addCard;
+
+  COLS.forEach(function(col){
+    var input = document.getElementById('input-'+col);
+    input.addEventListener('keydown', function(e){
+      if(e.key === 'Enter') addCard(col);
+    });
+  });
+
+  document.querySelectorAll('.column').forEach(function(colEl){
+    colEl.addEventListener('dragover', function(e){
+      e.preventDefault();
+      colEl.classList.add('dragover');
+    });
+    colEl.addEventListener('dragleave', function(){
+      colEl.classList.remove('dragover');
+    });
+    colEl.addEventListener('drop', function(e){
+      e.preventDefault();
+      colEl.classList.remove('dragover');
+      var dragging = document.querySelector('.card.dragging');
+      if(!dragging) return;
+      var id = dragging.dataset.id;
+      var status = colEl.dataset.status;
+      tasks = tasks.map(function(t){
+        if(t.id === id) t.status = status;
+        return t;
+      });
+      saveTasks(); renderBoard();
+    });
+  });
+
+  renderBoard();
+
+  setInterval(function(){
+    var fresh = load('fb_timer', state);
+    if(JSON.stringify(fresh) !== JSON.stringify(state)){
+      state = fresh; render();
+    }
+  }, 2000);
+})();
+</script>
+
+</body>
+</html>
